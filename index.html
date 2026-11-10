@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f5f0" />
+    <title>CHOPPASSOS — Chopp, panceta e pedidos</title>
+    <link rel="icon" type="image/png" href="icons/Chopassos.png" />
+    <link rel="apple-touch-icon" href="icons/Chopassos.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="CHOPPASSOS, início">
+        <img class="brand-logo" src="icons/Chopassos.png" alt="" />
+        <span class="brand-name">CHOPPASSOS</span>
+      </a>
+      <div class="topbar-center"><span class="open-dot"></span> Peça direto da sua mesa</div>
+      <button class="view-switch" id="view-switch" type="button">
+        <span class="switch-icon" aria-hidden="true">▤</span><span id="switch-label">Painel da cozinha</span><span aria-hidden="true">↗</span>
+      </button>
+    </header>
+
+    <main id="order-view">
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow"><span></span> CHOPP GELADO, PANCETA E BONS MOMENTOS</div>
+          <h1>O brinde perfeito<br />começa <em>na mesa.</em></h1>
+          <p>Escolha seu chopp, peça seus aperitivos<br class="desktop-break" /> e aproveite. A gente cuida do resto.</p>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <div class="art-circle"></div>
+          <div class="art-plate"><span>🍻</span></div>
+          <div class="art-leaf leaf-one">✳</div><div class="art-leaf leaf-two">✦</div>
+          <div class="art-caption">chopp gelado<br /><strong>panceta.</strong></div>
+        </div>
+        <div class="hero-bottom"><span>01 — ESCOLHA SEUS PRATOS</span><span>DESLIZE PARA DESCOBRIR ↓</span></div>
+      </section>
+
+      <div class="order-layout">
+        <section class="menu-section">
+          <div class="section-heading">
+            <div><span class="eyebrow">CARDÁPIO CHOPPASSOS</span><h2>Chopp, porções e <em>bons momentos.</em></h2></div>
+            <label class="table-select">SUA MESA <select id="table-number" aria-label="Número da mesa"></select></label>
+          </div>
+          <nav class="categories" id="categories" aria-label="Categorias do menu"></nav>
+          <div class="menu-grid" id="menu-grid"></div>
+        </section>
+
+        <aside class="cart" aria-label="Seu pedido">
+          <div class="cart-heading"><div><span class="eyebrow">SUA ESCOLHA</span><h2>Seu pedido <span class="cart-count" id="cart-count">0</span></h2></div><span class="cart-sparkle">✳</span></div>
+          <div class="cart-items" id="cart-items"></div>
+          <div class="cart-empty" id="cart-empty"><span class="empty-plate">＋</span><strong>Seu pedido começa aqui</strong><span>Escolha algo gostoso do menu.</span></div>
+          <div class="cart-footer">
+            <label class="note-label" for="order-note">ALGUMA OBSERVAÇÃO?</label>
+            <textarea id="order-note" rows="2" placeholder="Ex.: trazer os pedidos juntos..."></textarea>
+            <div class="cart-total"><span>Total</span><strong id="cart-total">R$ 0,00</strong></div>
+            <button class="checkout-button" id="checkout-button" type="button" disabled><span>Enviar pedido</span><span aria-hidden="true">→</span></button>
+            <p class="cart-footnote">Pagamento direto com a equipe do salão.</p>
+          </div>
+        </aside>
+      </div>
+      <footer class="site-footer"><span class="brand-name">CHOPPASSOS</span><span>Chopp gelado, panceta e bons momentos.</span><span>© 2026</span></footer>
+    </main>
+
+    <main id="kitchen-view" class="kitchen-view" hidden>
+      <section class="kitchen-header">
+        <div><div class="eyebrow"><span></span> CHOPPASSOS · OPERAÇÃO DO SALÃO</div><h1>Central de <em>pedidos.</em></h1><p>Acompanhe cada pedido, do balcão até a mesa.</p></div>
+        <div class="kitchen-clock"><span class="clock-dot"></span><span id="clock">--:--</span><small>AO VIVO</small></div>
+      </section>
+      <section class="kitchen-summary" id="kitchen-summary" aria-label="Resumo dos pedidos"></section>
+      <div class="board-toolbar"><div><h2>Pedidos em andamento</h2><span id="last-updated">Atualizado agora</span></div><div class="board-filters" id="board-filters"></div></div>
+      <section class="orders-board" id="orders-board"></section>
+      <footer class="kitchen-footer"><span class="kitchen-brand"><img class="brand-logo" src="icons/Chopassos.png" alt="" /> CHOPPASSOS — painel de pedidos</span><span>Pedidos sincronizados neste navegador</span></footer>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="modal-backdrop" id="kitchen-password-modal" hidden>
+      <form class="password-modal" id="kitchen-password-form" role="dialog" aria-modal="true" aria-labelledby="kitchen-password-title">
+        <img class="password-logo" src="icons/Chopassos.png" alt="" />
+        <span class="eyebrow">ACESSO RESTRITO</span>
+        <h2 id="kitchen-password-title">Modo da <em>cozinha.</em></h2>
+        <p>Digite a senha para acompanhar os pedidos.</p>
+        <label for="kitchen-password">Senha</label>
+        <input id="kitchen-password" name="password" type="password" inputmode="numeric" autocomplete="current-password" required />
+        <p class="password-error" id="kitchen-password-error" role="alert" hidden>Senha incorreta. Tente novamente.</p>
+        <div class="password-actions">
+          <button class="password-cancel" id="kitchen-password-cancel" type="button">Cancelar</button>
+          <button class="checkout-button" type="submit">Entrar <span aria-hidden="true">→</span></button>
+        </div>
+      </form>
+    </div>
+    <div class="modal-backdrop" id="success-modal" hidden>
+      <section class="success-modal" role="dialog" aria-modal="true" aria-labelledby="success-title">
+        <button class="modal-close" id="modal-close" type="button" aria-label="Fechar">×</button>
+        <span class="success-icon">✓</span><span class="eyebrow">PEDIDO ENVIADO</span>
+        <h2 id="success-title">Já está com a<br /><em>nossa equipe.</em></h2>
+        <p>Seu pedido <strong id="success-order-id"></strong> foi enviado para a cozinha. Pode ficar à vontade!</p>
+        <button class="checkout-button" id="continue-button" type="button">Continuar pedindo <span>→</span></button>
+      </section>
+    </div>
+  </body>
+</html>
