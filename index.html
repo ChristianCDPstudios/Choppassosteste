@@ -11,6 +11,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
+    <script src="supabase-config.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -75,7 +76,7 @@
       <section class="kitchen-summary" id="kitchen-summary" aria-label="Resumo dos pedidos"></section>
       <div class="board-toolbar"><div><h2>Pedidos em andamento</h2><span id="last-updated">Atualizado agora</span></div><div class="board-filters" id="board-filters"></div></div>
       <section class="orders-board" id="orders-board"></section>
-      <footer class="kitchen-footer"><span class="kitchen-brand"><img class="brand-logo" src="icons/Chopassos.png" alt="" /> CHOPPASSOS — painel de pedidos</span><span>Pedidos sincronizados neste navegador</span></footer>
+      <footer class="kitchen-footer"><span class="kitchen-brand"><img class="brand-logo" src="icons/Chopassos.png" alt="" /> CHOPPASSOS — painel de pedidos</span><span>Pedidos sincronizados online</span></footer>
     </main>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -84,9 +85,11 @@
         <img class="password-logo" src="icons/Chopassos.png" alt="" />
         <span class="eyebrow">ACESSO RESTRITO</span>
         <h2 id="kitchen-password-title">Modo da <em>cozinha.</em></h2>
-        <p>Digite a senha para acompanhar os pedidos.</p>
+        <p>Entre com a conta da equipe para acompanhar os pedidos.</p>
+        <label for="kitchen-email">E-mail</label>
+        <input id="kitchen-email" name="email" type="email" autocomplete="username" required />
         <label for="kitchen-password">Senha</label>
-        <input id="kitchen-password" name="password" type="password" inputmode="numeric" autocomplete="current-password" required />
+        <input id="kitchen-password" name="password" type="password" autocomplete="current-password" required />
         <p class="password-error" id="kitchen-password-error" role="alert" hidden>Senha incorreta. Tente novamente.</p>
         <div class="password-actions">
           <button class="password-cancel" id="kitchen-password-cancel" type="button">Cancelar</button>

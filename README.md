@@ -2,12 +2,19 @@
 
 Sistema web de pedidos por mesa do CHOPPASSOS, com chopp, bebidas, doses, aperitivos e porções. O destaque da casa é chopp e panceta.
 
-## Como abrir
+## Configuração do Supabase
 
-Abra `index.html` em um navegador. Escolha os itens do cardápio, selecione a mesa e envie o pedido. Use **Painel da cozinha** no cabeçalho para acompanhar os pedidos e avançar o status: novo, preparando, pronto e entregue.
+Os pedidos são compartilhados entre dispositivos pelo Supabase. Antes de usar o sistema:
 
-O painel da cozinha pede a senha `192503`, inclusive quando aberto diretamente com `?view=kitchen`. A senha protege apenas a interface no navegador; como este projeto é estático e não possui autenticação no servidor, não use essa proteção para dados confidenciais. Também é possível selecionar uma mesa pelo endereço com `?mesa=3`.
+1. Crie um projeto no Supabase e execute o conteúdo de `supabase-schema.sql` no SQL Editor.
+2. Em **Authentication → Providers**, mantenha desabilitado o cadastro público de usuários. Em **Authentication → Users**, crie uma conta para cada pessoa autorizada a usar a cozinha.
+3. Copie a URL do projeto e a chave `anon`/publishable em **Project Settings → API** para `url` e `anonKey` em `supabase-config.js`. Essa chave pública pode estar no navegador; nunca coloque a chave `service_role` nesse arquivo.
+4. Hospede os arquivos do site em um endereço HTTPS. Abra o endereço nos celulares para fazer pedidos; abra o mesmo endereço com `?view=kitchen` na tela da cozinha e entre com a conta da equipe.
 
-## Armazenamento e sincronização
+O painel atualiza automaticamente a cada 5 segundos. O banco permite que visitantes criem pedidos novos, mas só usuários autenticados podem consultar pedidos e alterar seus status. Não crie contas de cozinha para clientes.
 
-Esta versão salva pedidos no `localStorage` do navegador. As alterações são sincronizadas entre abas abertas no mesmo navegador, mas não entre dispositivos ou navegadores diferentes. Para instalar em um restaurante e receber pedidos de celulares na tela da cozinha, é necessário hospedar a aplicação com um backend compartilhado e autenticação apropriada.
+Também é possível selecionar uma mesa pelo endereço com `?mesa=3`.
+
+## Pedidos anteriores
+
+Pedidos que foram salvos pela versão anterior no `localStorage` continuam apenas no navegador em que foram criados; eles não são enviados automaticamente ao banco Supabase.

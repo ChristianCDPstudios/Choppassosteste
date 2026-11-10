@@ -17,8 +17,7 @@ const MENU = [
   { id: "torresmo-mandioca", name: "Torresmo / mandioca", description: "Porção de torresmo com mandioca.", price: 37, category: "Porções", emoji: "🥓", tone: "rose" },
   { id: "calabresa", name: "Porção de calabresa", description: "Porção de calabresa.", price: 33, category: "Porções", emoji: "🍽️", tone: "green" }
 ];
-const ORDER_STORAGE_KEY = "mesa-brasa-orders-v1";
-const KITCHEN_PASSWORD = "192503";
+const POLL_INTERVAL_MS = 5000;
 const CATEGORIES = ["Todos", "Chopp", "Porções", "Aperitivos", "Doses", "Bebidas"];
 const STATUS = {
   novo: { label: "Novo", action: "Começar preparo", next: "preparando", nextLabel: "Marcar como preparando" },
@@ -27,32 +26,69 @@ const STATUS = {
   entregue: { label: "Entregue", action: "Pedido entregue", next: null, nextLabel: null }
 };
 
-const state = { category: "Todos", cart: new Map(), kitchenFilter: "Ativos", orders: readOrders() };
+const state = { category: "Todos", cart: new Map(), kitchenFilter: "Ativos", orders: [] };
 let kitchenAuthenticated = false;
+let accessToken = null;
+let refreshToken = null;
+let tokenExpiresAt = 0;
+let refreshingOrders = false;
+let submittingOrder = false;
 const money = (value) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 const escapeHTML = (value) => String(value).replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 })[character]);
 
-function readOrders() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(ORDER_STORAGE_KEY) || "[]");
-    return Array.isArray(saved) ? saved.filter((order) => order && Array.isArray(order.items) && STATUS[order.status]) : [];
-  } catch (error) {
-    console.error("Não foi possível carregar os pedidos salvos.", error);
-    return [];
+function supabaseConfig() {
+  const config = window.SUPABASE_CONFIG;
+  if (!config || !config.url || !config.anonKey) {
+    throw new Error("Configure a URL e a chave pública do Supabase no arquivo supabase-config.js.");
   }
+  return { url: config.url.replace(/\/+$/, ""), anonKey: config.anonKey };
 }
 
-function saveOrders() {
-  try {
-    localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(state.orders));
-    return true;
-  } catch (error) {
-    showToast("Não foi possível salvar. Verifique o espaço disponível no navegador.");
-    console.error("Não foi possível salvar os pedidos.", error);
-    return false;
+async function supabaseRequest(path, { method = "GET", body, token, prefer } = {}) {
+  const config = supabaseConfig();
+  let authToken = token;
+  if (token && token === accessToken && refreshToken && Date.now() >= tokenExpiresAt - 60000) {
+    const response = await fetch(`${config.url}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: {
+        apikey: config.anonKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    });
+    const session = await response.json();
+    if (!response.ok) throw new Error(session.error_description || session.msg || "A sessão da cozinha expirou. Entre novamente.");
+    accessToken = session.access_token;
+    refreshToken = session.refresh_token;
+    tokenExpiresAt = Date.now() + Number(session.expires_in) * 1000;
+    authToken = accessToken;
   }
+  const headers = {
+    apikey: config.anonKey,
+    Authorization: `Bearer ${authToken || config.anonKey}`
+  };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (prefer) headers.Prefer = prefer;
+
+  const response = await fetch(`${config.url}${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const error = await response.json();
+      detail = error.message || error.msg || error.error_description || "";
+    } catch (error) {
+      console.error("Não foi possível interpretar o erro retornado pelo Supabase.", error);
+    }
+    throw new Error(detail || `O Supabase respondeu com o erro ${response.status}.`);
+  }
+  const result = await response.text();
+  return result ? JSON.parse(result) : null;
 }
 
 function currentView() {
@@ -140,6 +176,11 @@ function renderCart() {
   document.getElementById("checkout-button").disabled = count === 0;
 }
 
+function setOrderFormDisabled(disabled) {
+  document.querySelectorAll("#order-view button:not(#checkout-button), #order-view select, #order-view textarea")
+    .forEach((control) => { control.disabled = disabled; });
+}
+
 function renderKitchen() {
   const counts = {
     total: state.orders.filter((order) => order.status !== "entregue").length,
@@ -162,16 +203,16 @@ function renderKitchen() {
   }).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   document.getElementById("orders-board").innerHTML = filtered.length ? filtered.map(renderOrder).join("") :
     `<div class="board-empty"><span>✳</span><strong>Nenhum pedido por aqui.</strong><p>Os pedidos novos aparecem nesta tela assim que forem enviados.</p></div>`;
-  document.getElementById("last-updated").textContent = `Atualizado às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function renderOrder(order) {
   const status = STATUS[order.status];
   const createdAt = new Date(order.createdAt);
   const time = Number.isNaN(createdAt.getTime()) ? "Horário indisponível" : createdAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const displayId = order.id.slice(0, 8).toUpperCase();
   const lines = order.items.map((item) => `<div class="order-line"><span>${item.quantity}× ${escapeHTML(item.name)}</span><strong>${money(item.price * item.quantity)}</strong></div>`).join("");
   return `<article class="order-card">
-    <header class="order-card-head"><div><span class="order-code">#${escapeHTML(order.id)}</span><span class="order-time">Recebido às ${time}</span></div><div style="text-align:right"><span class="table-badge">MESA ${escapeHTML(order.table)}</span><br /><span class="status-label status-${order.status}">${status.label}</span></div></header>
+    <header class="order-card-head"><div><span class="order-code">#${escapeHTML(displayId)}</span><span class="order-time">Recebido às ${time}</span></div><div style="text-align:right"><span class="table-badge">MESA ${escapeHTML(order.table)}</span><br /><span class="status-label status-${order.status}">${status.label}</span></div></header>
     <div class="order-lines">${lines}</div>
     ${order.note ? `<p class="order-note"><strong>Obs.:</strong> ${escapeHTML(order.note)}</p>` : ""}
     <footer class="order-card-foot"><div class="order-card-total"><span>Total do pedido</span><strong>${money(order.total)}</strong></div>
@@ -194,40 +235,91 @@ function changeQuantity(id, amount) {
   renderCart();
 }
 
-function submitOrder() {
+async function submitOrder() {
+  if (submittingOrder) return;
   const items = [...state.cart.entries()].map(([id, quantity]) => {
     const item = MENU.find((entry) => entry.id === id);
     return { id, name: item.name, price: item.price, quantity };
   });
   if (!items.length) return;
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  let id;
-  do {
-    id = String(Math.floor(100000 + Math.random() * 900000));
-  } while (state.orders.some((order) => order.id === id));
+  const id = crypto.randomUUID();
   const order = {
-    id, table: Number(document.getElementById("table-number").value),
-    items, note: document.getElementById("order-note").value.trim(),
-    total, status: "novo", createdAt: new Date().toISOString()
+    id,
+    table_number: Number(document.getElementById("table-number").value),
+    items,
+    note: document.getElementById("order-note").value.trim(),
+    total,
+    status: "novo"
   };
-  state.orders.push(order);
-  if (!saveOrders()) {
-    state.orders.pop();
-    return;
+  const button = document.getElementById("checkout-button");
+  submittingOrder = true;
+  button.disabled = true;
+  setOrderFormDisabled(true);
+  try {
+    await supabaseRequest("/rest/v1/orders", {
+      method: "POST",
+      body: order,
+      prefer: "return=minimal"
+    });
+    document.getElementById("success-order-id").textContent = `#${id.slice(0, 8).toUpperCase()}`;
+    document.getElementById("success-modal").hidden = false;
+    state.cart.clear();
+    document.getElementById("order-note").value = "";
+    renderCart();
+  } catch (error) {
+    console.error("Não foi possível enviar o pedido ao Supabase.", error);
+    showToast(`Pedido não enviado: ${error.message}`);
+  } finally {
+    submittingOrder = false;
+    setOrderFormDisabled(false);
+    button.disabled = state.cart.size === 0;
   }
-  document.getElementById("success-order-id").textContent = `#${id}`;
-  document.getElementById("success-modal").hidden = false;
-  state.cart.clear();
-  document.getElementById("order-note").value = "";
-  renderCart();
 }
 
-function updateOrder(id) {
+async function updateOrder(id) {
   const order = state.orders.find((entry) => entry.id === id);
   if (!order || !STATUS[order.status].next) return;
-  order.status = STATUS[order.status].next;
-  saveOrders();
-  renderKitchen();
+  try {
+    await supabaseRequest(`/rest/v1/orders?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: { status: STATUS[order.status].next },
+      token: accessToken,
+      prefer: "return=minimal"
+    });
+    await refreshOrders();
+  } catch (error) {
+    console.error("Não foi possível atualizar o status do pedido.", error);
+    showToast(`Não foi possível atualizar: ${error.message}`);
+  }
+}
+
+async function refreshOrders() {
+  if (!accessToken || refreshingOrders) return;
+  refreshingOrders = true;
+  try {
+    const rows = await supabaseRequest(
+      "/rest/v1/orders?select=id,table_number,items,note,total,status,created_at&order=created_at.desc",
+      { token: accessToken }
+    );
+    state.orders = rows.map((row) => ({
+      id: row.id,
+      table: row.table_number,
+      items: row.items,
+      note: row.note,
+      total: Number(row.total),
+      status: row.status,
+      createdAt: row.created_at
+    })).filter((order) => Array.isArray(order.items) && STATUS[order.status]);
+    renderKitchen();
+    document.getElementById("last-updated").textContent =
+      `Sincronizado às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · atualiza a cada 5 s`;
+  } catch (error) {
+    console.error("Não foi possível sincronizar os pedidos.", error);
+    document.getElementById("last-updated").textContent = `Falha na sincronização: ${error.message}`;
+  } finally {
+    refreshingOrders = false;
+  }
 }
 
 let toastTimeout;
@@ -243,18 +335,43 @@ document.getElementById("view-switch").addEventListener("click", () => {
   if (currentView() === "kitchen") setView("order");
   else setView("kitchen");
 });
-document.getElementById("kitchen-password-form").addEventListener("submit", (event) => {
+document.getElementById("kitchen-password-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const password = document.getElementById("kitchen-password").value;
-  if (password !== KITCHEN_PASSWORD) {
-    document.getElementById("kitchen-password-error").hidden = false;
-    document.getElementById("kitchen-password").select();
-    return;
+  const form = event.currentTarget;
+  const submitButton = form.querySelector('button[type="submit"]');
+  const errorMessage = document.getElementById("kitchen-password-error");
+  errorMessage.hidden = true;
+  submitButton.disabled = true;
+  try {
+    const config = supabaseConfig();
+    const response = await fetch(`${config.url}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: config.anonKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        email: document.getElementById("kitchen-email").value.trim(),
+        password: document.getElementById("kitchen-password").value
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error_description || result.msg || "E-mail ou senha inválidos.");
+    accessToken = result.access_token;
+    refreshToken = result.refresh_token;
+    tokenExpiresAt = Date.now() + Number(result.expires_in) * 1000;
+    kitchenAuthenticated = true;
+    document.getElementById("kitchen-password-modal").hidden = true;
+    if (currentView() !== "kitchen") setView("kitchen");
+    else renderView();
+    await refreshOrders();
+  } catch (error) {
+    console.error("Não foi possível autenticar no painel da cozinha.", error);
+    errorMessage.textContent = error.message;
+    errorMessage.hidden = false;
+  } finally {
+    submitButton.disabled = false;
   }
-  kitchenAuthenticated = true;
-  document.getElementById("kitchen-password-modal").hidden = true;
-  if (currentView() !== "kitchen") setView("kitchen");
-  else renderView();
 });
 document.getElementById("kitchen-password-cancel").addEventListener("click", closeKitchenPassword);
 document.getElementById("kitchen-password-modal").addEventListener("click", (event) => {
@@ -292,12 +409,6 @@ document.getElementById("success-modal").addEventListener("click", (event) => {
   if (event.target.id === "success-modal") event.currentTarget.hidden = true;
 });
 window.addEventListener("popstate", renderView);
-window.addEventListener("storage", (event) => {
-  if (event.key === ORDER_STORAGE_KEY) {
-    state.orders = readOrders();
-    if (currentView() === "kitchen" && kitchenAuthenticated) renderKitchen();
-  }
-});
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") document.getElementById("success-modal").hidden = true;
   if (event.key === "Escape" && !document.getElementById("kitchen-password-modal").hidden) closeKitchenPassword();
@@ -307,6 +418,9 @@ function updateClock() {
 }
 updateClock();
 setInterval(updateClock, 1000);
+setInterval(() => {
+  if (currentView() === "kitchen" && kitchenAuthenticated) refreshOrders();
+}, POLL_INTERVAL_MS);
 
 renderTables();
 renderCategories();
